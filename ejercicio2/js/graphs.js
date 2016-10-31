@@ -1,97 +1,181 @@
+var DATE_FORMAT="YYYY-MM-DD";
+
+var data;
+var finished=0;
+var totalReaders=3;
+
 $(document).ready( function() {
 	data=new Array();
 	
-	loadData1(data);		
+	new Reader(
+			"http://s3.amazonaws.com/logtrust-static/test/test/data3.json",
+			parseCallback = function(json) {	
+				var dataRegex=/([0-9]{4}-[0-9]{2}-[0-9]{2})/;
+				var categoryRegex=/\#([^#]+)\#/;
+			    $.each(json, function(idx, item) {
+			    	var raw=item["raw"];
+			    	var date=dataRegex.exec(raw)[1];
+			    	var category = categoryRegex.exec(raw)[1];
+			    	insertItem(data, category.toUpperCase(), date, parseFloat(item["val"]));
+				});			    			    
+			},
+			checkAllFinished
+	).read();	
+	
+	
+	new Reader(
+			"http://s3.amazonaws.com/logtrust-static/test/test/data2.json",
+			parseCallback = function(json) {
+			    $.each(json, function(idx, item) {
+			    	insertItem(data, item["categ"].toUpperCase(), item["myDate"], parseFloat(item["val"]));
+				});
+    
+			},
+			checkAllFinished
+	).read();	
+	
+	new Reader(
+			"http://s3.amazonaws.com/logtrust-static/test/test/data1.json",
+			parseCallback = function(json) {
+				$.each(json, function(idx, item) {	
+					/* He restado un día deliberadamente para hacer que todas las fechas estuvieran en el mismo mes */
+					insertItem(data, item["cat"].toUpperCase(), moment(item["d"]).format(DATE_FORMAT), parseFloat(item["value"]));					
+					//insertItem(data, item["cat"].toUpperCase(), moment(parseInt(item["d"])-(30*24*60*60*1000)).format(DATE_FORMAT).toString(), parseFloat(item["value"]));
+				});
+	    
+			},
+			checkAllFinished
+	).read();	
+
 });
 
 
 
+function generatePieChart(data) {
+	var series=new Array();
+	for (category in data) {
+		var value= 0;
+		for (strDate in data[category]) {
+			value+=data[category][strDate];
+		};
+		series.push({name: category, y: value});
+		
+	};
+	
+	$('#graph2').highcharts({
+		chart: {
+            plotBackgroundColor: null,
+            plotBorderWidth: null,
+            plotShadow: false,
+            type: 'pie'
+        },
+        title: {
+            text: 'Gráfica 2'
+        },
+        tooltip: {
+            pointFormat: '{series.name}: <b>{point.y:.1f}</b>'
+        },
+        plotOptions: {
+            pie: {
+                allowPointSelect: true,
+                cursor: 'pointer',
+                dataLabels: {
+                    enabled: true,
+                    format: '<b>{point.name}</b>: {point.percentage:.1f} %',
+                    style: {
+                        color: (Highcharts.theme && Highcharts.theme.contrastTextColor) || 'black'
+                    }
+                }
+            }
+        },
+        series: [{
+            name: 'Valor',
+            colorByPoint: true,
+            data: series
+        }]
+	});
+}
+
 function generateLinearGraph(data) {
 	var series=new Array();
 	for (category in data) {
-		series.push(
-				{	
-					showInLegend: false,  
-		        	name: category,
-		            data: data[category],
-		            marker: {
-		                enabled: false
-		            }
-		        }
-		);
+		var values= new Array();
+		for (strDate in data[category]) {
+			var date=moment(strDate,DATE_FORMAT);
+			values.push({x:Date.UTC(date.year(), date.month(), date.date()), y:data[category][strDate]});
+		};
+		values.sort(function(a, b) {
+		    return a.x - b.x;
+		});
+		series.push({name: category, data: values});
+		
 	};
 	
-	console.log(series);
-	/*
-	chart.highcharts({
-	       chart: { zoomType: 'x' },
-	       title: { text: ''},
-	       subtitle: {text: ''},		        		        
-	       xAxis: {
-	       	allowDecimals: true,
-	       	type:"linear",
-	           title: {text: 'Fechas'            }
-	       },
-	       yAxis: {
-	           title: {text: 'Gr&aacute;fica 1'},
-	       },
-	       tooltip: {
-	           headerFormat: '',pointFormat: '{point.value}'
-	       },
-	       series: series
-	 });*/
+	$('#graph1').highcharts({
+        title: {
+            text: 'Gráfica 1'
+        },
+        subtitle: {
+            text: ''
+        },
+        xAxis: {
+            type: 'datetime',	 
+            title: {
+                text: 'Fecha'
+            }
+        },
+        yAxis: {
+            title: {
+                text: 'Valor'
+            },
+            min: 0
+        },
+        plotOptions: {
+            spline: {
+                marker: {
+                    enabled: true
+                }
+            }
+        },
+        legend: {
+            layout: 'vertical',
+            align: 'right',
+            verticalAlign: 'middle',
+            borderWidth: 0
+        },
+        tooltip: {
+        	headerFormat: '<b>{series.name}</b><br>',
+            pointFormat: '{point.x:%d-%m-%Y}: {point.y:.2f}'
+        },
+
+        series: series
+    });
 }
 
 
-function loadData1(data) {
-	
-	$.getJSON('http://s3.amazonaws.com/logtrust-static/test/test/data1.json', function(json){
-		$.each(json, function(idx, item) {
-			insertItem(data, item["cat"].toUpperCase(), new Date(item["d"]), parseFloat(item["value"]));
-		});
-		loadData2(data);
-	}).fail(function(xhr, status, error){
-			showErrorFromResponse(xhr);
-	}) ;
-}
 
-function loadData2(data) {
-	$.getJSON('http://s3.amazonaws.com/logtrust-static/test/test/data2.json', function(json){
-		$.each(json, function(idx, item) {
-			//insertItem(data, item["categ"].toUpperCase(), new Date(item["myDate"]), parseFloat(item["val"]));
-		});
-		loadData3(data);
-	}).fail(function(xhr, status, error){
-			showErrorFromResponse(xhr);
-	}) ;
-}
-
-
-function loadData3(data) {
-	
-	$.getJSON('http://s3.amazonaws.com/logtrust-static/test/test/data3.json', function(json){
-		$.each(json, function(idx, item) {
-			//insertItem(data, item["cat"].toUpperCase(), new Date(item["d"]), parseFloat(item["value"]));
-		});
+function checkAllFinished() {
+	finished++;
+	if (finished==totalReaders) {
 		generateLinearGraph(data);
-	}).fail(function(xhr, status, error){
-			showErrorFromResponse(xhr);
-	}) ;
+		generatePieChart(data);	
+	}
 }
 
 
-function insertItem(data, category, date, value) {
+function insertItem(data, category, strDate, value) {
 	if (data[category]==null) {
 		data[category]=[];
-		data[category][date]=value;
-	} else if (data[category][date]==null) {
-		data[category][date]=value;
+		data[category][strDate]=value;
+	} else if (data[category][strDate]==null) {
+		data[category][strDate]=value;
 	} else {
-		data[category][date]+=value;
+		data[category][strDate]+=value;
 	}
 }
 
 function showError(xhr) {
 	console.log(xhr);
-	alert(xhr);
 }
+
+
